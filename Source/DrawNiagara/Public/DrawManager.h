@@ -15,15 +15,20 @@ class DRAWNIAGARA_API ADrawManager : public AActor
 	
 public:
 	ADrawManager();
+
+	virtual void Tick(float DeltaSeconds) override;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	UNiagaraComponent* NS_DrawSolver;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="DrawManager|Settings")
 	float DistanceBetweenDraws = 5;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="DrawManager|Settings")
 	float EraseStrength = 100;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="DrawManager|Settings")
+	float NiagaraDrawsPerTick = 100;
 	
 	UFUNCTION(BlueprintCallable)
 	void Draw();
@@ -54,24 +59,28 @@ protected:
 	float MinMovement = 0.1f;
 
 	UPROPERTY()
-	FVector GridLocation = FVector();
-
-	UPROPERTY()
 	TArray<USphereComponent*>  DrawingSpheres;
 
 	UPROPERTY()
 	TArray<FVector> PrevLocation;
 
 	UPROPERTY()
-	TArray<FVector4> DrawingPositionsAndRadius;
+	TArray<FVector4> BufferDrawingPositionsAndRadius;
 
 	UPROPERTY()
-	TArray<FVector> DrawingDirections;
-
+	TArray<FVector> BufferDrawingDirections;
+	
 	UFUNCTION()
 	void Drawing();
 
 	UFUNCTION()
-	void  FindPointsBetweenLocationsWithDistance(FVector End, FVector Start, float DistanceBetween,
-		TArray<FVector>& OutPoints, FVector& OutDirection);
+	void DrawFromBuffer();
+
+	UFUNCTION()
+	void AsyncFindPointsBetweenLocationsWithDistance(FVector End, FVector Start, float DistanceBetween, float DrawRadius);
+	
+	UFUNCTION()
+	static void FindPointsBetweenLocationsWithDistance(const FVector& End, const FVector& Start, float DistanceBetween,
+	                                                   TArray<FVector>& OutPoints, FVector& OutDirection);
+	
 };
