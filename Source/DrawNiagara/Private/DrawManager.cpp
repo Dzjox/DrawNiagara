@@ -5,10 +5,8 @@
 #include "Components/SphereComponent.h"
 #include "NiagaraComponent.h"
 #include "NiagaraDataInterfaceArrayFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
-
-
-class USceneComponent;
 
 ADrawManager::ADrawManager()
 {
@@ -87,6 +85,8 @@ void ADrawManager::SetGridLocation(FVector NewGridLocation)
 
 void ADrawManager::Drawing()
 {
+	NS_DrawSolver->SetBoolParameter("ClearCanvas", false);
+	
 	for (int i=0; i < DrawingSpheres.Num(); i++)
 	{
 		if (PrevLocation[i].IsZero())
@@ -97,8 +97,13 @@ void ADrawManager::Drawing()
 		{
 			if(UKismetMathLibrary::VSizeSquared(DrawingSpheres[i]->GetComponentLocation() - PrevLocation[i]) > MinMovement)
 			{
+				float TimeSinceStart = UGameplayStatics::GetTimeSeconds(GetWorld());
+
+				TimeOfAsyncData.Enqueue(TimeSinceStart);
+				AsyncData.Add(TimeSinceStart, FDrawInfo());
+				
 				AsyncFindPointsBetweenLocationsWithDistance(DrawingSpheres[i]->GetComponentLocation(),
-					PrevLocation[i], DistanceBetweenDraws, DrawingSpheres[i]->GetUnscaledSphereRadius());
+					PrevLocation[i], DistanceBetweenDraws, DrawingSpheres[i]->GetUnscaledSphereRadius(), TimeSinceStart);
 				
 				PrevLocation[i] = DrawingSpheres[i]->GetComponentLocation();
 			}
@@ -111,46 +116,90 @@ void ADrawManager::DrawFromBuffer()
 	int DrawsCount = BufferDrawingPositionsAndRadius.Num() > NiagaraDrawsPerTick ?
 		NiagaraDrawsPerTick : BufferDrawingPositionsAndRadius.Num();
 
-	if (DrawsCount == 0)
+	if (DrawsCount != 0)
+	{
+		TArray<FVector4> DrawingPositions;
+		TArray<FVector> Directions;
+
+		for (int i = 0; i < DrawsCount; i++)
+		{
+			DrawingPositions.Add(BufferDrawingPositionsAndRadius[i]);
+			Directions.Add(BufferDrawingDirections[i]);
+		}
+
+		BufferDrawingPositionsAndRadius.RemoveAt(0,DrawsCount, true);
+		BufferDrawingDirections.RemoveAt(0,DrawsCount, true);
+
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector4(NS_DrawSolver,
+		"DrawingLocationsAndRadiuses", DrawingPositions);
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(NS_DrawSolver,
+		"DrawingDirections", Directions);
+
+		NS_DrawSolver->SetFloatParameter("EraseStrength", EraseStrength);
+	}
+
+	TryAddToBuffer();
+}
+
+void ADrawManager::TryAddToBuffer()
+{
+	if (AsyncData.Num() == 0)
 	{
 		return;
 	}
 	
-	TArray<FVector4> DrawingPositions;
-	TArray<FVector> Directions;
-
-	for (int i = 0; i < DrawsCount; i++)
+	int AddedPoints = 0;
+	while(true)
 	{
-		DrawingPositions.Add(BufferDrawingPositionsAndRadius[i]);
-		Directions.Add(BufferDrawingDirections[i]);
+		if (AsyncData.Num() == 0)
+		{
+			return;
+		}
+
+		if (!AsyncData.Find(*TimeOfAsyncData.Peek()))
+		{
+			return;
+		}
+
+		if (AsyncData.Find(*TimeOfAsyncData.Peek())->PointInfos.Num() == 0)
+		{
+			return;
+		}
+
+		float Time;
+		TimeOfAsyncData.Dequeue(Time);
+		FDrawInfo DrawInfo = AsyncData.FindAndRemoveChecked(Time);
+		for (FPointInfo PointInfo : DrawInfo.PointInfos)
+		{
+			BufferDrawingPositionsAndRadius.Add(PointInfo.LocationAndRadius);
+			BufferDrawingDirections.Add(PointInfo.Direction);
+			AddedPoints ++;
+		}
+		
+		if (AddedPoints > NiagaraDrawsPerTick)
+		{
+			return;
+		}
 	}
-
-	BufferDrawingPositionsAndRadius.RemoveAtSwap(0,DrawsCount, true);
-	BufferDrawingDirections.RemoveAtSwap(0,DrawsCount, true);
-	
-	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector4(NS_DrawSolver,
-	"DrawingLocationsAndRadiuses", DrawingPositions);
-	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(NS_DrawSolver,
-	"DrawingDirections", Directions);
-
-	NS_DrawSolver->SetFloatParameter("EraseStrength", EraseStrength);
 }
 
 
-void ADrawManager::AsyncFindPointsBetweenLocationsWithDistance(FVector End, FVector Start, float DistanceBetween, float DrawRadius)
+void ADrawManager::AsyncFindPointsBetweenLocationsWithDistance(FVector End, FVector Start, float DistanceBetween,
+                                                               float DrawRadius, float Time)
 {
-	AsyncTask(ENamedThreads::AnyThread, [this, End, Start, DistanceBetween, DrawRadius]()
+	AsyncTask(ENamedThreads::AnyThread, [this, End, Start, DistanceBetween, DrawRadius, Time]()
 	{
 		TArray<FVector> Points;
 		FVector Direction;
 		FindPointsBetweenLocationsWithDistance(End, Start, DistanceBetween, Points, Direction);
 					
-		AsyncTask(ENamedThreads::GameThread, [this, Points, Direction, DrawRadius]()
+		AsyncTask(ENamedThreads::GameThread, [this, Points, Direction, DrawRadius, Time]()
 		{
+			AsyncData.Find(Time)->PointInfos.SetNum(Points.Num());
 			for (int j=0; j < Points.Num(); j++)
 			{
-				BufferDrawingPositionsAndRadius.Add( FVector4(Points[j].X, Points[j].Y, Points[j].Z,DrawRadius));
-				BufferDrawingDirections.Add(Direction);
+				AsyncData.Find(Time)->PointInfos[j].LocationAndRadius = FVector4(Points[j].X, Points[j].Y, Points[j].Z,DrawRadius);
+				AsyncData.Find(Time)->PointInfos[j].Direction = Direction;
 			}
 		});
 	});

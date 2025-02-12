@@ -6,7 +6,20 @@
 #include "GameFramework/Actor.h"
 #include "NiagaraComponent.h"
 #include "Components/SphereComponent.h"
+#include "Containers/SortedMap.h"
 #include "DrawManager.generated.h"
+
+struct FPointInfo
+{
+	FVector4 LocationAndRadius;
+	FVector Direction;
+};
+
+struct FDrawInfo
+{
+	TArray<FPointInfo> PointInfos;
+};
+
 
 UCLASS()
 class DRAWNIAGARA_API ADrawManager : public AActor
@@ -53,34 +66,25 @@ public:
 
 protected:
 	UPROPERTY()
-	bool IsErasingMod = false ;
-
+	TArray<USphereComponent*>  DrawingSpheres;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	float MinMovement = 0.1f;
+	
+	bool IsErasingMod = false ;
 
-	UPROPERTY()
-	TArray<USphereComponent*>  DrawingSpheres;
-
-	UPROPERTY()
 	TArray<FVector> PrevLocation;
-
-	UPROPERTY()
 	TArray<FVector4> BufferDrawingPositionsAndRadius;
-
-	UPROPERTY()
 	TArray<FVector> BufferDrawingDirections;
+	TMap<float, FDrawInfo> AsyncData;
+	TQueue<float> TimeOfAsyncData;
 	
-	UFUNCTION()
 	void Drawing();
-
-	UFUNCTION()
 	void DrawFromBuffer();
-
-	UFUNCTION()
-	void AsyncFindPointsBetweenLocationsWithDistance(FVector End, FVector Start, float DistanceBetween, float DrawRadius);
-	
-	UFUNCTION()
-	static void FindPointsBetweenLocationsWithDistance(const FVector& End, const FVector& Start, float DistanceBetween,
+	void TryAddToBuffer();
+	void AsyncFindPointsBetweenLocationsWithDistance(FVector End, FVector Start, float DistanceBetween, float DrawRadius,
+		float Time);
+	void FindPointsBetweenLocationsWithDistance(const FVector& End, const FVector& Start, float DistanceBetween,
 	                                                   TArray<FVector>& OutPoints, FVector& OutDirection);
 	
 };
