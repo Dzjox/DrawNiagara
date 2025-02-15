@@ -26,7 +26,7 @@ void ADrawManager::Draw()
 {
 	if (IsErasingMod)
 	{
-		NS_DrawSolver->SetVariableBool("Eraser", false);
+		NS_DrawSolver->SetVariableBool( IsSecondRTUsed ? "Eraser_Extra":"Eraser", false);
 		IsErasingMod = false;
 	}
 
@@ -37,7 +37,7 @@ void ADrawManager::Erase()
 {
 	if (!IsErasingMod)
 	{
-		NS_DrawSolver->SetVariableBool("Eraser", true);
+		NS_DrawSolver->SetVariableBool(IsSecondRTUsed ? "Eraser_Extra":"Eraser", true);
 		IsErasingMod = true;
 	}
 
@@ -73,6 +73,10 @@ void ADrawManager::ClearCanvas()
 	"DrawingLocationsAndRadiuses", TArray<FVector4>());
 	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(NS_DrawSolver,
 	"DrawingDirections", TArray<FVector>());
+	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector4(NS_DrawSolver,
+"DrawingLocationsAndRadiuses_Extra", TArray<FVector4>());
+	UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(NS_DrawSolver,
+	"DrawingDirections_Extra", TArray<FVector>());
 	BufferDrawingPositionsAndRadius.Empty();
 	BufferDrawingDirections.Empty();
 	PrevLocation.SetNum(DrawingSpheres.Num());
@@ -81,6 +85,11 @@ void ADrawManager::ClearCanvas()
 void ADrawManager::SetGridLocation(FVector NewGridLocation)
 {
 	NS_DrawSolver->SetVectorParameter("GridLocation", NewGridLocation);
+}
+
+void ADrawManager::SwitchRT()
+{
+	IsSecondRTUsed = !IsSecondRTUsed;
 }
 
 void ADrawManager::Drawing()
@@ -129,11 +138,15 @@ void ADrawManager::DrawFromBuffer()
 
 		BufferDrawingPositionsAndRadius.RemoveAt(0,DrawsCount, true);
 		BufferDrawingDirections.RemoveAt(0,DrawsCount, true);
-
-		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector4(NS_DrawSolver,
-		"DrawingLocationsAndRadiuses", DrawingPositions);
-		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(NS_DrawSolver,
-		"DrawingDirections", Directions);
+		
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector4(
+			NS_DrawSolver,
+			IsSecondRTUsed ? "DrawingLocationsAndRadiuses_Extra" : "DrawingLocationsAndRadiuses",
+			DrawingPositions);
+		UNiagaraDataInterfaceArrayFunctionLibrary::SetNiagaraArrayVector(
+			NS_DrawSolver,
+			IsSecondRTUsed ? "DrawingDirections_Extra" : "DrawingDirections",
+			Directions);
 
 		NS_DrawSolver->SetFloatParameter("EraseStrength", EraseStrength);
 	}

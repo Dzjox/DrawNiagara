@@ -63,6 +63,9 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void SetGridLocation(FVector NewGridLocation);
+	
+	UFUNCTION(BlueprintCallable)
+	void SwitchRT();
 
 protected:
 	UPROPERTY()
@@ -72,6 +75,7 @@ protected:
 	float MinMovement = 0.1f;
 	
 	bool IsErasingMod = false ;
+	bool IsSecondRTUsed = false ;
 
 	TArray<FVector> PrevLocation;
 	TArray<FVector4> BufferDrawingPositionsAndRadius;
